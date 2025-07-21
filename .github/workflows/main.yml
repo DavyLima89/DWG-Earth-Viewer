@@ -1,0 +1,124 @@
+# .github/workflows/build-apk.yml
+# Arquivo para compilar APK automaticamente no GitHub
+
+name: 🚀 Build DWG Earth Viewer APK
+
+on:
+  # Trigger manual (você pode executar quando quiser)
+  workflow_dispatch:
+    inputs:
+      release_name:
+        description: 'Nome da versão (ex: v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+        
+  # Trigger automático ao fazer push
+  push:
+    branches: [ main, master ]
+    
+  # Trigger ao criar Pull Request
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-apk:
+    name: 📱 Gerar APK do DWG Earth Viewer
+    runs-on: ubuntu-latest
+    
+    steps:
+    # 1. Baixar código do repositório
+    - name: 📥 Checkout do código
+      uses: actions/checkout@v4
+      
+    # 2. Configurar Java (necessário para Android)
+    - name: ☕ Configurar JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+        
+    # 3. Dar permissão de execução ao Gradle
+    - name: 🔧 Configurar permissões do Gradle
+      run: chmod +x gradlew
+      
+    # 4. Limpar projeto anterior
+    - name: 🧹 Limpar build anterior
+      run: ./gradlew clean
+      
+    # 5. Compilar o projeto
+    - name: 🔨 Compilar projeto
+      run: ./gradlew build
+      
+    # 6. Gerar APK de debug
+    - name: 📱 Gerar APK Debug
+      run: ./gradlew assembleDebug
+      
+    # 7. Gerar APK de release (se tiver keystore configurado)
+    - name: 📦 Gerar APK Release (Opcional)
+      run: ./gradlew assembleRelease
+      continue-on-error: true
+      
+    # 8. Encontrar arquivo APK gerado
+    - name: 🔍 Localizar APK
+      run: |
+        find . -name "*.apk" -type f
+        ls -la app/build/outputs/apk/debug/
+        
+    # 9. Upload do APK como artefato
+    - name: ⬆️ Upload APK Debug
+      uses: actions/upload-artifact@v4
+      with:
+        name: DWG-Earth-Viewer-Debug-${{ github.run_number }}
+        path: app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 30
+        
+    # 10. Upload APK Release (se existir)
+    - name: ⬆️ Upload APK Release
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: DWG-Earth-Viewer-Release-${{ github.run_number }}
+        path: app/build/outputs/apk/release/app-release.apk
+        retention-days: 60
+      continue-on-error: true
+      
+    # 11. Criar release automático (se executado manualmente)
+    - name: 🎉 Criar Release
+      if: github.event_name == 'workflow_dispatch'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.event.inputs.release_name }}
+        name: DWG Earth Viewer ${{ github.event.inputs.release_name }}
+        body: |
+          🎯 **Nova versão do DWG Earth Viewer!**
+          
+          ## 📱 Funcionalidades:
+          - ✅ Visualização de arquivos DWG sobre Google Earth
+          - ✅ Localização GPS em tempo real com seta
+          - ✅ Navegação topográfica interativa
+          - ✅ Importação de projetos DWG
+          
+          ## 📥 **Como instalar:**
+          1. Baixe o arquivo `app-debug.apk`
+          2. No Android: Configurações → Segurança → Permitir fontes desconhecidas
+          3. Instale o APK
+          4. Configure sua API Key do Google Maps
+          
+          ## 🔑 **API Key necessária:**
+          - Obtenha gratuitamente em: https://console.cloud.google.com/
+          - Ative Maps SDK for Android
+          
+          **Gerado automaticamente via GitHub Actions** 🤖
+        files: |
+          app/build/outputs/apk/debug/app-debug.apk
+          app/build/outputs/apk/release/app-release.apk
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+# Configurações adicionais para projetos Android
+env:
+  # Configurar Gradle para usar menos memória
+  GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx2048m -XX:+HeapDumpOnOutOfMemoryError"
